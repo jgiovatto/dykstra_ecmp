@@ -1,6 +1,6 @@
 
 
-// to build:  g++ ./dykstra.cc -W -Wall -o foo --std=c++11
+// to build:  g++ ./main.cc -W -Wall -o dykstra_ecmp
 
 #include<queue>
 #include<set>
