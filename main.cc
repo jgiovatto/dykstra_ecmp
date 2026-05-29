@@ -10,8 +10,9 @@
 #include<climits>
 #include<cstdint>
 #include<iostream>
+#include<sstream>
 #include<functional>
-#include <algorithm>
+#include<algorithm>
 #include<sys/time.h>
 
 #undef DEBUG
@@ -26,6 +27,21 @@ using WeightType = float;
 const WeightType MAX_WEIGHT = 0xFFFF;
 const WeightType DEF_WEIGHT = 1.0;
 const WeightType DEF_BIAS   = 0.0;
+
+template <typename T>
+inline std::string containerToString(const T & items)
+ {
+   std::stringstream ss;
+   size_t n = 0;
+   for(const auto & e : items)
+     {
+       if(n++ == 0)
+          ss << e;
+       else
+          ss << ", " << e;
+     }
+    return ss.str();
+  }
 
 
 class WeightEntry
@@ -75,6 +91,27 @@ struct LinkCmp {
     }
  };
 
+
+std::string toString(const Parents & parents)
+ {
+   std::stringstream ss;
+   ss << "parents:\n";
+
+   for(const auto & [nodeId, nodeIds] : parents)
+    {
+       if(nodeIds.empty() == true)
+        {
+           ss << "\tnone" << std::endl;
+        }
+       else
+        {
+           ss << "\tu: " << nodeId  << " = {" << containerToString<NodeIds>(nodeIds) << "}" << std::endl;
+        }
+    }
+
+   ss << "\n--------------------------------\n";
+   return ss.str();
+ }
 
 class Topology 
 { 
@@ -167,12 +204,18 @@ void Topology::getCost(const NodeId src)
    Weights distance; 
 
    for(const auto & dst : destinations_)
-    {
-      distance[dst] = WeightEntry{MAX_WEIGHT};
+    {      
+       if(dst == src)
+        {               
+          // cost to self is 0
+          distance[src] = WeightEntry{};
+        }                         
+       else                       
+        {              
+          // init cost to INF
+          distance[dst] = WeightEntry{MAX_WEIGHT};
+        }  
     }
-
-   // cost to self is 0
-   distance[src] = WeightEntry{}; 
 
    // insert self node with 0 weight to bootstrap the search
    priorityQueue.emplace(WeightType{0}, src); 
@@ -192,42 +235,34 @@ void Topology::getCost(const NodeId src)
 
       for(auto & edge : topology_[u]) 
        { 
-         const auto & w = edge.first.getWeight();
-         const auto & v = edge.second; 
-         const auto uw  = distance[u].getWeight() + w;
+         const auto w = edge.first.getWeight();
+         const auto v = edge.second; 
+         const auto du_w = distance[u].getWeight() + w;
+         const auto dv   = distance[v].getWeight();
+
+#ifdef DEBUG
+         std::cout << "u= " << u << ", v= " << v << ", w= " << w << ", du_w= " << du_w << ", dv= " << dv << std::endl;
+#endif
 
          // check for lower cost
-         if(uw < distance[v].getWeight()) 
+         if(du_w < dv) 
            { 
-#ifdef DEBUG1
-              printf("u %hu -> v %hu, wu %f + w %f < wv %f, set wv = %f \n", 
-                      u, v, distance[u].getWeight(), w, distance[v].getWeight(), uw);
-#endif
-              distance[v].setWeight(uw);
+              distance[v].setWeight(du_w);
+
+              // add new vertex and continue search
+              priorityQueue.emplace(du_w, v); 
 
               parents[v].clear();
               parents[v].insert(u);
-
-              // add new vertex and continue search
-              priorityQueue.emplace(Link{distance[v].getWeight(), v}); 
            }
-          else if(uw == distance[v].getWeight()) 
+          else if(du_w == dv) 
            {
               parents[v].insert(u);
-#ifdef DEBUG1
-              printf("u %hu -> v %hu, wu %f + w %f == wv %f \n", 
-                      u, v, distance[u].getWeight(), w, distance[v].getWeight());
-#endif
-           }
-          else
-           {
-#ifdef DEBUG1
-              printf("u %hu -> v %hu, wu %f + w %f > wv %f, skip \n", 
-                      u, v, distance[u].getWeight(), w, distance[v].getWeight());
-#endif
            }
         } 
      } 
+
+ std::cout << toString(parents);
 
  for(const auto dst : destinations_)
   {
